@@ -1,0 +1,70 @@
+<Window x:Class="QBScannerBridge.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="QBScannerBridge" Height="650" Width="980">
+    <Grid Margin="10">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="340"/>
+            <ColumnDefinition Width="10"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left: list -->
+        <DockPanel Grid.Column="0">
+            <StackPanel DockPanel.Dock="Top" Orientation="Vertical" Margin="0,0,0,8">
+                <TextBlock FontSize="16" FontWeight="Bold" Text="Watched folder:"/>
+                <TextBlock Text="C:\Scans\QB"/>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <Button Name="BtnStart" Width="120" Margin="0,0,8,0" Click="BtnStart_Click">Start Watching</Button>
+                    <Button Name="BtnStop" Width="120" Click="BtnStop_Click">Stop</Button>
+                </StackPanel>
+            </StackPanel>
+
+            <ListBox Name="DocsList" SelectionChanged="DocsList_SelectionChanged" />
+        </DockPanel>
+
+        <!-- Right: details -->
+        <ScrollViewer Grid.Column="2">
+            <StackPanel>
+                <TextBlock FontSize="16" FontWeight="Bold" Text="Document Review" Margin="0,0,0,10"/>
+
+                <WrapPanel>
+                    <StackPanel Width="300" Margin="0,0,20,0">
+                        <TextBlock Text="Vendor"/>
+                        <TextBox Name="TxtVendor" />
+
+                        <TextBlock Text="Invoice #" Margin="0,8,0,0"/>
+                        <TextBox Name="TxtInvoice"/>
+
+                        <TextBlock Text="Invoice Date" Margin="0,8,0,0"/>
+                        <TextBox Name="TxtDate"/>
+
+                        <TextBlock Text="Total" Margin="0,8,0,0"/>
+                        <TextBox Name="TxtTotal"/>
+
+                        <TextBlock Text="Expense Account" Margin="0,8,0,0"/>
+                        <TextBox Name="TxtAccount"/>
+
+                        <TextBlock Text="Memo" Margin="0,8,0,0"/>
+                        <TextBox Name="TxtMemo"/>
+                    </StackPanel>
+
+                    <StackPanel Width="300">
+                        <TextBlock Text="Status"/>
+                        <TextBox Name="TxtStatus" IsReadOnly="True"/>
+
+                        <Button Name="BtnPost" Margin="0,10,0,0" Height="34" Click="BtnPost_Click">
+                            Post Bill to QuickBooks
+                        </Button>
+
+                        <TextBlock Text="QBXML Response (first 2000 chars)" Margin="0,12,0,0"/>
+                        <TextBox Name="TxtResponse" Height="180" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
+                    </StackPanel>
+                </WrapPanel>
+
+                <TextBlock Text="Raw OCR Text" Margin="0,14,0,0"/>
+                <TextBox Name="TxtRaw" Height="260" TextWrapping="Wrap" AcceptsReturn="True" VerticalScrollBarVisibility="Auto"/>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>
