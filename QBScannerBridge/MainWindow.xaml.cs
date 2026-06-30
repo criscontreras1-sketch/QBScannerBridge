@@ -41,6 +41,21 @@ namespace QBScannerBridge
             _qb = new QuickBooksService();
         }
 
+        private ProductionBoardWindow _boardWindow;
+
+        private void BtnBoard_Click(object sender, RoutedEventArgs e)
+        {
+            if (_boardWindow == null || !_boardWindow.IsLoaded)
+            {
+                _boardWindow = new ProductionBoardWindow(_docs) { Owner = this };
+                _boardWindow.Show();
+            }
+            else
+            {
+                _boardWindow.Activate();
+            }
+        }
+
         private void BtnStart_Click(object sender, RoutedEventArgs e)
         {
             _watcher.Start();

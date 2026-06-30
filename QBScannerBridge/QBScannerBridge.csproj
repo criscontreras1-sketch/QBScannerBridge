@@ -68,6 +68,15 @@
       <SubType>Code</SubType>
     </Compile>
 
+    <Page Include="ProductionBoardWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="ProductionBoardWindow.xaml.cs">
+      <DependentUpon>ProductionBoardWindow.xaml</DependentUpon>
+      <SubType>Code</SubType>
+    </Compile>
+
     <Compile Include="Helpers\SafeFileHelper.cs" />
     <Compile Include="Models\ScanDocument.cs" />
     <Compile Include="Services\FolderWatcherService.cs" />
