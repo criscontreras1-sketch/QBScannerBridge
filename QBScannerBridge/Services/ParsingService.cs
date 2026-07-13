@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -8,6 +9,12 @@ namespace QBScannerBridge.Services
 {
     public class ParsingService
     {
+        private static readonly HashSet<string> _vendorSkipWords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "invoice", "bill", "receipt", "statement", "page", "date", "total", "subtotal",
+            "to:", "from:", "ship to:", "bill to:", "sold to:", "remit to:"
+        };
+
         public ScanDocument Parse(string filePath, string rawText)
         {
             var doc = new ScanDocument
@@ -31,7 +38,9 @@ namespace QBScannerBridge.Services
             var lines = text
                 .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
                 .Select(x => x.Trim())
-                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Where(x => x.Length >= 3)
+                .Where(x => !_vendorSkipWords.Contains(x))
+                .Where(x => !Regex.IsMatch(x, @"^\W+$"))
                 .ToList();
 
             return lines.FirstOrDefault() ?? "Unknown Vendor";
@@ -41,15 +50,16 @@ namespace QBScannerBridge.Services
         {
             string[] patterns =
             {
-                @"(?i)invoice\s*(number|#|no\.?)*\s*[:\-]?\s*([A-Z0-9\-]+)",
-                @"(?i)inv\s*(number|#|no\.?)*\s*[:\-]?\s*([A-Z0-9\-]+)"
+                @"(?i)(?:invoice|inv)\s*(?:number|#|no\.?)?\s*[:\-]?\s*([A-Z0-9\-]+)",
+                @"(?i)(?:po|purchase\s*order)\s*(?:number|#|no\.?)?\s*[:\-]?\s*([A-Z0-9\-]+)",
+                @"(?i)(?:bill|receipt|order|ref|reference)\s*(?:number|#|no\.?)?\s*[:\-]?\s*([A-Z0-9\-]+)",
             };
 
             foreach (var pattern in patterns)
             {
                 var match = Regex.Match(text, pattern);
                 if (match.Success)
-                    return match.Groups[2].Value.Trim();
+                    return match.Groups[1].Value.Trim();
             }
 
             return string.Empty;
@@ -59,8 +69,12 @@ namespace QBScannerBridge.Services
         {
             string[] patterns =
             {
-                @"\b(\d{1,2}/\d{1,2}/\d{2,4})\b",
-                @"\b(\d{4}-\d{2}-\d{2})\b"
+                @"\b(\d{1,2}[/\-]\d{1,2}[/\-]\d{4})\b",
+                @"\b(\d{4}-\d{2}-\d{2})\b",
+                @"\b(\d{1,2}/\d{1,2}/\d{2})\b",
+                @"(?i)\b((?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4})\b",
+                @"(?i)\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.?\s+\d{1,2},?\s+\d{4})\b",
+                @"(?i)\b(\d{1,2}\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4})\b",
             };
 
             foreach (var pattern in patterns)
@@ -77,7 +91,7 @@ namespace QBScannerBridge.Services
         {
             string[] labeledPatterns =
             {
-                @"(?i)total\s*(due|amount)?\s*[:\-]?\s*\$?\s*([0-9,]+\.[0-9]{2})",
+                @"(?i)total\s*(?:due|amount)?\s*[:\-]?\s*\$?\s*([0-9,]+\.[0-9]{2})",
                 @"(?i)amount\s*due\s*[:\-]?\s*\$?\s*([0-9,]+\.[0-9]{2})",
                 @"(?i)balance\s*due\s*[:\-]?\s*\$?\s*([0-9,]+\.[0-9]{2})"
             };
@@ -87,7 +101,7 @@ namespace QBScannerBridge.Services
                 var match = Regex.Match(text, pattern);
                 if (match.Success)
                 {
-                    string value = match.Groups[match.Groups.Count - 1].Value.Replace(",", "");
+                    string value = match.Groups[1].Value.Replace(",", "");
                     if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal total))
                         return total;
                 }
@@ -108,11 +122,21 @@ namespace QBScannerBridge.Services
         {
             string text = (vendorName + " " + rawText).ToLowerInvariant();
 
-            if (text.Contains("lkq") || text.Contains("parts") || text.Contains("dealer"))
+            if (text.Contains("lkq") || text.Contains("parts") || text.Contains("dealer")
+                || text.Contains("autozone") || text.Contains("auto zone")
+                || text.Contains("napa") || text.Contains("o'reilly") || text.Contains("oreilly"))
                 return "Parts Expense";
 
-            if (text.Contains("tow") || text.Contains("glass") || text.Contains("sublet"))
+            if (text.Contains("tow") || text.Contains("glass") || text.Contains("sublet")
+                || text.Contains("paint") || text.Contains("body shop") || text.Contains("labor"))
                 return "Sublet Expense";
+
+            if (text.Contains("office") || text.Contains("supply") || text.Contains("supplies")
+                || text.Contains("staples") || text.Contains("amazon"))
+                return "Office Supplies";
+
+            if (text.Contains("fuel") || text.Contains("gasoline") || text.Contains("gas station"))
+                return "Fuel Expense";
 
             return "Parts Expense";
         }

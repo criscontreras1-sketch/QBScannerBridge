@@ -6,12 +6,14 @@ namespace QBScannerBridge.Services
 {
     public class PdfToImageService
     {
+        private const int RenderDpi = 300;
+
         public string RenderFirstPageToTempPng(string pdfPath)
         {
             string tempPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".png");
 
             using (var document = PdfDocument.Load(pdfPath))
-            using (var image = document.Render(0, 220, 220, true))
+            using (var image = document.Render(0, RenderDpi, RenderDpi, true))
             {
                 image.Save(tempPath, System.Drawing.Imaging.ImageFormat.Png);
             }

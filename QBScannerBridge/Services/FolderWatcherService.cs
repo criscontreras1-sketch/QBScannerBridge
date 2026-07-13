@@ -3,9 +3,9 @@ using System.IO;
 
 namespace QBScannerBridge.Services
 {
-    public class FolderWatcherService
+    public class FolderWatcherService : IDisposable
     {
-        private readonly FileSystemWatcher _watcher;
+        private FileSystemWatcher _watcher;
         public event Action<string> FileDetected;
 
         public FolderWatcherService(string folderPath)
@@ -30,10 +30,17 @@ namespace QBScannerBridge.Services
         private void Watcher_Created(object sender, FileSystemEventArgs e)
         {
             string ext = Path.GetExtension(e.FullPath)?.ToLowerInvariant();
-            if (ext == ".pdf" || ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tif" || ext == ".tiff" || ext == ".bmp")
+            if (ext == ".pdf" || ext == ".png" || ext == ".jpg" || ext == ".jpeg"
+                || ext == ".tif" || ext == ".tiff" || ext == ".bmp")
             {
                 FileDetected?.Invoke(e.FullPath);
             }
+        }
+
+        public void Dispose()
+        {
+            _watcher?.Dispose();
+            _watcher = null;
         }
     }
 }

@@ -12,9 +12,7 @@ namespace QBScannerBridge
 {
     public partial class MainWindow : Window
     {
-        private const string WatchFolder = @"C:\Scans\QB";
-
-        private readonly FolderWatcherService _watcher;
+        private FolderWatcherService _watcher;
         private readonly PdfToImageService _pdfToImage;
         private readonly OcrService _ocr;
         private readonly ParsingService _parser;
@@ -28,12 +26,8 @@ namespace QBScannerBridge
 
             DocsList.ItemsSource = _docs;
 
-            _watcher = new FolderWatcherService(WatchFolder);
-            _watcher.FileDetected += OnFileDetected;
-
             _pdfToImage = new PdfToImageService();
 
-            // tessdata folder next to exe
             string tessDataPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tessdata");
             _ocr = new OcrService(tessDataPath);
 
@@ -43,14 +37,31 @@ namespace QBScannerBridge
 
         private void BtnStart_Click(object sender, RoutedEventArgs e)
         {
+            string folder = TxtWatchFolder.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(folder))
+            {
+                SetFooterStatus("Please enter a watch folder path.");
+                return;
+            }
+
+            _watcher?.Stop();
+            _watcher?.Dispose();
+
+            _watcher = new FolderWatcherService(folder);
+            _watcher.FileDetected += OnFileDetected;
             _watcher.Start();
-            MessageBox.Show("Watching started. Drop PDFs/images into C:\\Scans\\QB.");
+
+            BtnStart.IsEnabled = false;
+            BtnStop.IsEnabled = true;
+            SetFooterStatus($"Watching: {folder}");
         }
 
         private void BtnStop_Click(object sender, RoutedEventArgs e)
         {
-            _watcher.Stop();
-            MessageBox.Show("Watching stopped.");
+            _watcher?.Stop();
+            BtnStart.IsEnabled = true;
+            BtnStop.IsEnabled = false;
+            SetFooterStatus("Watching stopped.");
         }
 
         private void DocsList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -66,12 +77,13 @@ namespace QBScannerBridge
                 var doc = new ScanDocument
                 {
                     FilePath = path,
-                    FileName = System.IO.Path.GetFileName(path),
+                    FileName = Path.GetFileName(path),
                     Status = "Detected"
                 };
 
                 _docs.Insert(0, doc);
                 DocsList.SelectedItem = doc;
+                SetFooterStatus($"File detected: {doc.FileName}");
             });
 
             await ProcessDocumentAsync(path);
@@ -82,17 +94,16 @@ namespace QBScannerBridge
             await Dispatcher.InvokeAsync(() =>
             {
                 var doc = FindDoc(path);
-                if (doc != null) doc.Status = "Waiting for file...";
-                DocsList.Items.Refresh();
+                if (doc != null) doc.Status = "Waiting for file\u2026";
             });
 
-            if (!SafeFileHelper.WaitUntilFileReady(path))
+            if (!await SafeFileHelper.WaitUntilFileReadyAsync(path))
             {
                 await Dispatcher.InvokeAsync(() =>
                 {
                     var doc = FindDoc(path);
-                    if (doc != null) doc.Status = "File not ready / locked";
-                    DocsList.Items.Refresh();
+                    if (doc != null) doc.Status = "File locked / not ready";
+                    SetFooterStatus($"Could not read: {Path.GetFileName(path)}");
                 });
                 return;
             }
@@ -104,21 +115,19 @@ namespace QBScannerBridge
                 await Dispatcher.InvokeAsync(() =>
                 {
                     var doc = FindDoc(path);
-                    if (doc != null) doc.Status = "OCR...";
-                    DocsList.Items.Refresh();
+                    if (doc != null) doc.Status = "Running OCR\u2026";
+                    SetFooterStatus($"OCR: {Path.GetFileName(path)}");
                 });
 
-                string ocrText;
-
-                if (SafeFileHelper.IsPdf(path))
+                string ocrText = await Task.Run(() =>
                 {
-                    tempImage = _pdfToImage.RenderFirstPageToTempPng(path);
-                    ocrText = _ocr.ExtractTextFromImage(tempImage);
-                }
-                else
-                {
-                    ocrText = _ocr.ExtractTextFromImage(path);
-                }
+                    if (SafeFileHelper.IsPdf(path))
+                    {
+                        tempImage = _pdfToImage.RenderFirstPageToTempPng(path);
+                        return _ocr.ExtractTextFromImage(tempImage);
+                    }
+                    return _ocr.ExtractTextFromImage(path);
+                });
 
                 var parsed = _parser.Parse(path, ocrText);
                 parsed.Status = "Ready to review";
@@ -126,13 +135,14 @@ namespace QBScannerBridge
                 await Dispatcher.InvokeAsync(() =>
                 {
                     ReplaceDoc(path, parsed);
-                    DocsList.Items.Refresh();
 
                     if (DocsList.SelectedItem is ScanDocument selected &&
                         string.Equals(selected.FilePath, path, StringComparison.OrdinalIgnoreCase))
                     {
                         LoadDocToUI(parsed);
                     }
+
+                    SetFooterStatus($"Ready: {parsed.FileName}");
                 });
             }
             catch (Exception ex)
@@ -141,7 +151,7 @@ namespace QBScannerBridge
                 {
                     var doc = FindDoc(path);
                     if (doc != null) doc.Status = "Error: " + ex.Message;
-                    DocsList.Items.Refresh();
+                    SetFooterStatus($"Error processing {Path.GetFileName(path)}: {ex.Message}");
                 });
             }
             finally
@@ -153,7 +163,7 @@ namespace QBScannerBridge
             }
         }
 
-        private void BtnPost_Click(object sender, RoutedEventArgs e)
+        private async void BtnPost_Click(object sender, RoutedEventArgs e)
         {
             if (!(DocsList.SelectedItem is ScanDocument doc))
                 return;
@@ -175,24 +185,49 @@ namespace QBScannerBridge
             else
                 doc.TotalAmount = null;
 
+            if (string.IsNullOrWhiteSpace(doc.VendorName))
+            {
+                SetFooterStatus("Vendor name is required.");
+                return;
+            }
+            if (!doc.InvoiceDate.HasValue)
+            {
+                SetFooterStatus("Invoice date is required.");
+                return;
+            }
+            if (!doc.TotalAmount.HasValue)
+            {
+                SetFooterStatus("Total amount is required.");
+                return;
+            }
+
+            BtnPost.IsEnabled = false;
+            doc.Status = "Posting to QuickBooks\u2026";
+            TxtStatus.Text = doc.Status;
+            SetFooterStatus("Posting to QuickBooks\u2026");
+
             try
             {
-                doc.Status = "Posting to QuickBooks...";
-                DocsList.Items.Refresh();
-
-                string resp = _qb.AddBill(doc);
+                string resp = await Task.Run(() => _qb.AddBill(doc));
 
                 doc.Status = "Posted";
+                doc.LastResponse = resp;
                 TxtStatus.Text = doc.Status;
-                TxtResponse.Text = (resp?.Length > 2000) ? resp.Substring(0, 2000) : resp;
-                DocsList.Items.Refresh();
+                TxtResponse.Text = resp;
+                SetFooterStatus($"Posted bill for {doc.VendorName}.");
             }
             catch (Exception ex)
             {
-                doc.Status = "Post failed: " + ex.Message;
+                doc.Status = "Post failed";
+                doc.LastResponse = ex.Message;
                 TxtStatus.Text = doc.Status;
-                DocsList.Items.Refresh();
-                MessageBox.Show(ex.ToString(), "QuickBooks post failed");
+                TxtResponse.Text = ex.Message;
+                SetFooterStatus("Post failed: " + ex.Message);
+                MessageBox.Show(ex.ToString(), "QuickBooks Post Failed", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                BtnPost.IsEnabled = true;
             }
         }
 
@@ -206,6 +241,19 @@ namespace QBScannerBridge
             TxtMemo.Text = doc.Memo;
             TxtStatus.Text = doc.Status;
             TxtRaw.Text = doc.RawText;
+            TxtResponse.Text = doc.LastResponse ?? string.Empty;
+        }
+
+        private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            _watcher?.Stop();
+            _watcher?.Dispose();
+            _ocr?.Dispose();
+        }
+
+        private void SetFooterStatus(string message)
+        {
+            TxtFooterStatus.Text = message;
         }
 
         private ScanDocument FindDoc(string path)

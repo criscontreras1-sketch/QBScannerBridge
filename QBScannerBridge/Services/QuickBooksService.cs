@@ -33,6 +33,7 @@ namespace QBScannerBridge.Services
                 ticket = rp.BeginSession("", QBFileMode.qbFileOpenDoNotCare);
 
                 string response = rp.ProcessRequest(ticket, qbxml);
+                CheckResponseForErrors(response);
                 return response;
             }
             finally
@@ -84,6 +85,26 @@ namespace QBScannerBridge.Services
             sb.Append("</QBXMLMsgsRq>");
             sb.Append("</QBXML>");
             return sb.ToString();
+        }
+
+        private void CheckResponseForErrors(string response)
+        {
+            if (string.IsNullOrWhiteSpace(response)) return;
+            try
+            {
+                var xdoc = System.Xml.Linq.XDocument.Parse(response);
+                foreach (var rs in xdoc.Descendants("BillAddRs"))
+                {
+                    string severity = (string)rs.Attribute("statusSeverity");
+                    if (string.Equals(severity, "Error", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string code = (string)rs.Attribute("statusCode");
+                        string message = (string)rs.Attribute("statusMessage");
+                        throw new InvalidOperationException($"QuickBooks error {code}: {message}");
+                    }
+                }
+            }
+            catch (System.Xml.XmlException) { }
         }
 
         private string XmlEscape(string value) => SecurityElement.Escape(value) ?? string.Empty;

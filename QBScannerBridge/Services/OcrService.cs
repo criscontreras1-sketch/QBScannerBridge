@@ -1,23 +1,39 @@
+using System;
 using Tesseract;
 
 namespace QBScannerBridge.Services
 {
-    public class OcrService
+    public class OcrService : IDisposable
     {
-        private readonly string _tessDataPath;
+        private readonly TesseractEngine _engine;
+        private readonly object _lock = new object();
+        private bool _disposed;
 
         public OcrService(string tessDataPath)
         {
-            _tessDataPath = tessDataPath;
+            _engine = new TesseractEngine(tessDataPath, "eng", EngineMode.Default);
         }
 
         public string ExtractTextFromImage(string imagePath)
         {
-            using (var engine = new TesseractEngine(_tessDataPath, "eng", EngineMode.Default))
-            using (var img = Pix.LoadFromFile(imagePath))
-            using (var page = engine.Process(img))
+            if (_disposed) throw new ObjectDisposedException(nameof(OcrService));
+
+            lock (_lock)
             {
-                return page.GetText();
+                using (var img = Pix.LoadFromFile(imagePath))
+                using (var page = _engine.Process(img))
+                {
+                    return page.GetText();
+                }
+            }
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                _engine?.Dispose();
+                _disposed = true;
             }
         }
     }

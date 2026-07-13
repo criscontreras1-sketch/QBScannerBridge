@@ -1,5 +1,6 @@
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 
 namespace QBScannerBridge.Helpers
 {
@@ -12,16 +13,30 @@ namespace QBScannerBridge.Helpers
                 try
                 {
                     using (FileStream stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read))
-                    {
                         return true;
-                    }
                 }
                 catch
                 {
                     Thread.Sleep(delayMs);
                 }
             }
+            return false;
+        }
 
+        public static async Task<bool> WaitUntilFileReadyAsync(string path, int maxAttempts = 20, int delayMs = 500)
+        {
+            for (int i = 0; i < maxAttempts; i++)
+            {
+                try
+                {
+                    using (FileStream stream = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        return true;
+                }
+                catch
+                {
+                    await Task.Delay(delayMs);
+                }
+            }
             return false;
         }
 
@@ -33,8 +48,7 @@ namespace QBScannerBridge.Helpers
 
         public static bool IsPdf(string path)
         {
-            string ext = Path.GetExtension(path)?.ToLowerInvariant();
-            return ext == ".pdf";
+            return string.Equals(Path.GetExtension(path), ".pdf", System.StringComparison.OrdinalIgnoreCase);
         }
     }
 }
